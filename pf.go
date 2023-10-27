@@ -23,34 +23,41 @@ func (p *Particle) UpdateWeight(weight float64) {
 }
 
 type ParticleFilter struct {
-	NumSamples       int
-	PercentResample  float64
-	ListParticles    []*Particle
-	Sigma            float64
-	XLimit           float64
-	YLimit           float64
-	EstimatedX       float64
-	EstimatedY       float64
-	EstimatedHeading float64
-	MaxWeight        float64
-	iteration        int
-	locDistribution  distuv.Normal
-	angDistribution  distuv.Normal
-	distDistribution distuv.Normal
+	numSamples       int         // number of samples in the particle filter
+	percentResample  float64     // percent of particles that are resampled
+	listParticles    []*Particle // list of our current particles
+	xMin             float64     //TODO: Rework this to an initial estimate?
+	xMax             float64
+	yMin             float64 // TODO: Rework this to an initial estimate?
+	yMax             float64
+	EstimatedX       float64       // Where we think the x location is
+	EstimatedY       float64       // Where we think the y location is
+	EstimatedHeading float64       // Which way we think the rover is going
+	maxWeight        float64       // maxWeight of the current iteration
+	iteration        int           // current iteration of the filter
+	locDistribution  distuv.Normal // error distribution for location
+	angDistribution  distuv.Normal // error distribution for angle
+	distDistribution distuv.Normal // error distribution for distance
 }
 
 // createpf creates an a particle filter object with various parameters
-func CreatePF(numSamps int, percResamp, sigma, xLimit, yLimit, locError, distError, angError float64) *ParticleFilter {
+// numSamps: How many samples the particle filter has
+// xMin: the minimum value the filter generates values for in the x direction
+// xMax: the maximum value the filter generates values for in the x direction
+// yMin: the minimum value the filter generates values for in the x direction
+// yMax: the maximum value the filter generates values for in the x direction
+// locError: sigma value for error in location
+// distError: sigma value for error in distance
+// angError: sigma value for error in angle
+func CreatePF(numSamps int, percResamp, xMin, xMax, yMin, yMax, locError, distError, angError float64) *ParticleFilter {
 
 	pf := &ParticleFilter{
-		NumSamples:      numSamps,
-		PercentResample: percResamp,
-		ListParticles:   []*Particle{},
-		Sigma:           sigma,
-		XLimit:          xLimit,
-		YLimit:          yLimit,
-		MaxWeight:       0.0,
-		iteration:       0,
+		numSamples:      numSamps,
+		percentResample: percResamp,
+		listParticles:   []*Particle{},
+		maxWeight:       0.0,
+		iteration:       0, // how many times the filter has run
+
 		locDistribution: distuv.Normal{
 			Mu:    0,
 			Sigma: locError,
@@ -73,20 +80,22 @@ func CreatePF(numSamps int, percResamp, sigma, xLimit, yLimit, locError, distErr
 
 // check if weight is greater than current max weight
 func (pf *ParticleFilter) checkAndSetMaxWeight(weight float64, override bool) {
-	if weight > pf.MaxWeight {
-		pf.MaxWeight = weight
+	if weight > pf.maxWeight {
+		pf.maxWeight = weight
 	}
 
 	// when we want to reset to zero
 	if override {
-		pf.MaxWeight = weight
+		pf.maxWeight = weight
 	}
 }
 
 // createParticle creates a particle for use in a pf
 func (pf *ParticleFilter) createParticle() Particle {
-	x := rand.Float64() * pf.XLimit
-	y := rand.Float64() * pf.YLimit
+	xRange := pf.xMax - pf.xMax
+	yRange := pf.yMax - pf.yMin
+	x := pf.xMin + xRange*rand.Float64()
+	y := pf.yMin + yRange*rand.Float64()
 	heading := rand.Float64() * 2 * math.Pi
 	p := Particle{X: x, Y: y, Weight: 0, Heading: heading}
 
@@ -95,9 +104,9 @@ func (pf *ParticleFilter) createParticle() Particle {
 
 // create initial sample list
 func (pf *ParticleFilter) createSampleList() {
-	for i := 0; i < pf.NumSamples; i++ {
+	for i := 0; i < pf.numSamples; i++ {
 		p := pf.createParticle()
-		pf.ListParticles = append(pf.ListParticles, &p)
+		pf.listParticles = append(pf.listParticles, &p)
 	}
 }
 
@@ -105,8 +114,8 @@ func (pf *ParticleFilter) createSampleList() {
 // to the location of the particles
 func (pf *ParticleFilter) CalculateWeights(r Reading) {
 	pf.checkAndSetMaxWeight(0.0, true)
-	for i := range pf.ListParticles {
-		p := pf.ListParticles[i]
+	for i := range pf.listParticles {
+		p := pf.listParticles[i]
 
 		// iterate over readings from each anchor
 		// calculate length from each particle to anchor
@@ -124,9 +133,9 @@ func (pf *ParticleFilter) CalculateWeights(r Reading) {
 // and adds random particles in case we did not converge on the correct  answer
 func (pf *ParticleFilter) ResampleAndFuzz() {
 	pf.iteration += 1
-	numResample := float64(pf.NumSamples) * pf.PercentResample
+	numResample := float64(pf.numSamples) * pf.percentResample
 	numIntResample := int(numResample)
-	numSpoof := pf.NumSamples - numIntResample
+	numSpoof := pf.numSamples - numIntResample
 	newParticleList := []*Particle{}
 
 	// our new particle estimates
@@ -136,10 +145,10 @@ func (pf *ParticleFilter) ResampleAndFuzz() {
 	// Resample wheel code reused from OMSCS RAIT course Particle Filter Section
 	// Originally developed by Sebastian Thrun
 	for i := 0; i < numIntResample; i++ {
-		beta := rand.Float64() * pf.MaxWeight * 2
+		beta := rand.Float64() * pf.maxWeight * 2
 		startIdx := rand.Intn(numIntResample)
 		for beta > 0 {
-			p := pf.ListParticles[startIdx]
+			p := pf.listParticles[startIdx]
 			if p.Weight > beta {
 
 				// creating normal dists around particle x and y
@@ -162,7 +171,7 @@ func (pf *ParticleFilter) ResampleAndFuzz() {
 			}
 
 			beta -= p.Weight
-			startIdx = (startIdx + 1) % (pf.NumSamples)
+			startIdx = (startIdx + 1) % (pf.numSamples)
 		}
 	}
 
@@ -179,7 +188,7 @@ func (pf *ParticleFilter) ResampleAndFuzz() {
 		newParticleList = append(newParticleList, &p)
 	}
 
-	pf.ListParticles = newParticleList
+	pf.listParticles = newParticleList
 
 }
 
@@ -189,8 +198,8 @@ func (pf *ParticleFilter) Move(dist, ang float64) {
 	x := 0.0
 	y := 0.0
 
-	for i := range pf.ListParticles {
-		particle := pf.ListParticles[i]
+	for i := range pf.listParticles {
+		particle := pf.listParticles[i]
 
 		dist += pf.distDistribution.Rand()
 		ang += pf.angDistribution.Rand()
@@ -204,9 +213,9 @@ func (pf *ParticleFilter) Move(dist, ang float64) {
 		y += particle.Y
 	}
 
-	pf.EstimatedX = x / float64(len(pf.ListParticles))
-	pf.EstimatedY = y / float64(len(pf.ListParticles))
-	pf.EstimatedHeading = heading / float64(len(pf.ListParticles))
+	pf.EstimatedX = x / float64(len(pf.listParticles))
+	pf.EstimatedY = y / float64(len(pf.listParticles))
+	pf.EstimatedHeading = heading / float64(len(pf.listParticles))
 
 }
 
