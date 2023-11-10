@@ -1,4 +1,4 @@
-module particle-filter
+module github.com/jhoydich/particle-filter
 
 go 1.20
 
