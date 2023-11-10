@@ -3,17 +3,17 @@ package main
 import (
 	"fmt"
 	"math"
-	particlefilter "particle-filter"
 
+	pf "github.com/jhoydich/particle-filter"
 	"gonum.org/v1/gonum/stat/distuv"
 )
 
 func main() {
 	noiseGenerator := distuv.Normal{Mu: 0, Sigma: .05}
 
-	pf := particlefilter.CreatePF(500, 1, 0, 10, 0, 10, .1, .1, math.Pi/16)
+	filter := pf.CreatePF(500, 1, 0, 10, 0, 10, .1, .1, math.Pi/16)
 
-	p := particlefilter.Particle{X: 1.0, Y: 1.0, Heading: math.Pi / 2, Weight: 1}
+	p := pf.Particle{X: 1.0, Y: 1.0, Heading: math.Pi / 2, Weight: 1}
 
 	for i := 0; i < 20; i++ {
 		r := SimpleReading{
@@ -21,13 +21,13 @@ func main() {
 			Y: p.Y + noiseGenerator.Rand(),
 		}
 
-		pf.CalculateWeights(r)
-		pf.ResampleAndFuzz()
-		fmt.Println("Before Move: ", "Particle:", p.X, p.Y, p.Heading, "Filter:", pf.EstimatedX, pf.EstimatedY, pf.EstimatedHeading)
+		filter.CalculateWeights(r)
+		filter.ResampleAndFuzz()
+		fmt.Println("Before Move: ", "Particle:", p.X, p.Y, p.Heading, "Filter:", filter.EstimatedX, filter.EstimatedY, filter.EstimatedHeading)
 		p.Move(.5+noiseGenerator.Rand(), 0)
 
-		pf.MoveParticles(.5, 0)
-		fmt.Println("After Move: ", "Particle:", p.X, p.Y, p.Heading, "Filter:", pf.EstimatedX, pf.EstimatedY, pf.EstimatedHeading)
+		filter.MoveParticles(.5, 0)
+		fmt.Println("After Move: ", "Particle:", p.X, p.Y, p.Heading, "Filter:", filter.EstimatedX, filter.EstimatedY, filter.EstimatedHeading)
 	}
 
 	//pf.CalculateWeights()
@@ -38,10 +38,10 @@ type SimpleReading struct {
 	Y float64
 }
 
-func (s SimpleReading) CalculateWeight(p particlefilter.Particle) float64 {
+func (s SimpleReading) CalculateWeight(p pf.Particle) float64 {
 
 	dist := math.Sqrt(math.Pow((s.X-p.X), 2) + math.Pow((s.Y-p.Y), 2))
 
-	return particlefilter.CalculateNormDist(dist, 0, .1)
+	return pf.CalculateNormDist(dist, 0, .1)
 
 }
