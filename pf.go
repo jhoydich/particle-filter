@@ -9,6 +9,7 @@ import (
 
 type Reading interface {
 	CalculateWeight(Particle) float64
+	Unmarshal(data []byte)
 }
 
 type Particle struct {
@@ -50,6 +51,7 @@ type ParticleFilter struct {
 	locDistribution  distuv.Normal // error distribution for location
 	angDistribution  distuv.Normal // error distribution for angle
 	distDistribution distuv.Normal // error distribution for distance
+
 }
 
 // createpf creates an a particle filter object with various parameters
@@ -219,7 +221,7 @@ func (pf *ParticleFilter) ResampleAndFuzz() {
 
 }
 
-func (pf *ParticleFilter) MoveParticles(dist, ang float64) {
+func (pf *ParticleFilter) Move(dist, ang float64) {
 
 	heading := 0.0
 	x := 0.0
@@ -246,4 +248,18 @@ func CalculateNormDist(x, mu, sigma float64) float64 {
 	xMuExponent := math.Pow(((x - mu) / sigma), 2.0)
 	eulerExponent := math.Pow(math.E, (-.5 * xMuExponent))
 	return ((1 / (sigma * math.Sqrt(2*math.Pi))) * eulerExponent)
+}
+
+func (pf *ParticleFilter) GetPosition() (float64, float64) {
+	return pf.EstimatedX, pf.EstimatedY
+}
+
+func (pf *ParticleFilter) GetHeading() float64 {
+	return pf.EstimatedHeading
+}
+
+func (pf *ParticleFilter) Update(r Reading) {
+
+	pf.CalculateWeights(r)
+	pf.ResampleAndFuzz()
 }

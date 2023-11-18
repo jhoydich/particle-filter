@@ -26,7 +26,7 @@ func main() {
 		fmt.Println("Before Move: ", "Particle:", p.X, p.Y, p.Heading, "Filter:", filter.EstimatedX, filter.EstimatedY, filter.EstimatedHeading)
 		p.Move(.5+noiseGenerator.Rand(), 0)
 
-		filter.MoveParticles(.5, 0)
+		filter.Move(.5, 0)
 		fmt.Println("After Move: ", "Particle:", p.X, p.Y, p.Heading, "Filter:", filter.EstimatedX, filter.EstimatedY, filter.EstimatedHeading)
 	}
 
@@ -43,5 +43,9 @@ func (s SimpleReading) CalculateWeight(p pf.Particle) float64 {
 	dist := math.Sqrt(math.Pow((s.X-p.X), 2) + math.Pow((s.Y-p.Y), 2))
 
 	return pf.CalculateNormDist(dist, 0, .1)
+
+}
+
+func (s SimpleReading) Unmarshal(data []byte) {
 
 }
